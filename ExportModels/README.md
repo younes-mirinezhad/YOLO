@@ -8,7 +8,7 @@ pip install ultralytics
 1: Set modelPath on Export.py  
 2: Run Export in python: python3 Export.py  
 #
-### ExportOnnxEnd2End.py
+### Export_Onnx_End2End.py
 1: Set pytorch model path (weight_pt="path/to/model.pt")  
 2: Set model input shape (input_shape=[1, 3, 640, 640])  
 3: Set model CONF threshoud (conf_thres = 0.25)    

@@ -23,17 +23,22 @@ def main():
 
     ONNX_Export(weight_pt, ONNX_Path, device, input_shape, opset, topk, sim, conf_thres, iou_thres)
 
-
 def ONNX_Export(weight_pt, weight_ONNX, device, input_shape, opset, topk, sim, conf_thres, iou_thres):
-    PostDetect.conf_thres = conf_thres
-    PostDetect.iou_thres = iou_thres
-    PostDetect.topk = topk
-
     batch = input_shape[0]
 
     YOLOv8 = YOLO(weight_pt)
-
     model = YOLOv8.model.fuse().eval()
+
+    modelType = str(type(next(model.modules())))[6:-2].split('.')[-1]
+    if modelType == 'DetectionModel':
+        PostDetect.conf_thres = conf_thres
+        PostDetect.iou_thres = iou_thres
+        PostDetect.topk = topk
+    # elif modelType == 'PoseModel':
+    #     PostPose.conf_thres = conf_thres
+    #     PostPose.iou_thres = iou_thres
+    #     PostPose.topk = topk
+
     for m in model.modules():
         optim(m)
         m.to(device)
@@ -70,14 +75,35 @@ def ONNX_Export(weight_pt, weight_ONNX, device, input_shape, opset, topk, sim, c
     onnx.save(onnx_model, weight_ONNX)
     print(f'-----> ONNX export success, saved as: ---> {weight_ONNX}')
 
+def optim(module: nn.Module):
+    s = str(type(module))[6:-2].split('.')[-1]
+    print('--------------------------> ', s)
+    if s == 'Detect':
+        setattr(module, '__class__', PostDetect)
+    elif s == 'C2f':
+        setattr(module, '__class__', C2f)
+    # elif s == 'Pose':
+    #     setattr(module, '__class__', PostPose)
+
+class C2f(nn.Module):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x):
+        x = self.cv1(x)
+        x = [x, x[:, self.c:, ...]]
+        x.extend(m(x[-1]) for m in self.m)
+        x.pop(1)
+        return self.cv2(torch.cat(x, 1))
 
 class PostDetect(nn.Module):
-    export = True
-    shape = None
-    dynamic = False
     iou_thres = 0.65
     conf_thres = 0.25
     topk = 100
+    export = True
+    shape = None
+    dynamic = False
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -102,6 +128,55 @@ class PostDetect(nn.Module):
 
         return TRT_NMS.apply(boxes.transpose(1, 2), scores.transpose(1, 2), self.iou_thres, self.conf_thres, self.topk)
 
+class PostSeg(nn.Module):
+    export = True
+    shape = None
+    dynamic = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x):
+        p = self.proto(x[0])  # mask protos
+        bs = p.shape[0]  # batch size
+        mc = torch.cat([self.cv4[i](x[i]).view(bs, self.nm, -1) for i in range(self.nl)], 2)  # mask coefficients
+        boxes, scores, labels = self.forward_det(x)
+        out = torch.cat([boxes, scores, labels.float(), mc.transpose(1, 2)], 2)
+        return out, p.flatten(2)
+
+    def forward_det(self, x):
+        shape = x[0].shape
+        b, res, b_reg_num = shape[0], [], self.reg_max * 4
+        for i in range(self.nl):
+            res.append(torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1))
+        if self.dynamic or self.shape != shape:
+            self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
+            self.shape = shape
+        x = [i.view(b, self.no, -1) for i in res]
+        y = torch.cat(x, 2)
+        boxes, scores = y[:, :b_reg_num, ...], y[:, b_reg_num:, ...].sigmoid()
+        boxes = boxes.view(b, 4, self.reg_max, -1).permute(0, 1, 3, 2)
+        boxes = boxes.softmax(-1) @ torch.arange(self.reg_max).to(boxes)
+        boxes0, boxes1 = -boxes[:, :2, ...], boxes[:, 2:, ...]
+        boxes = self.anchors.repeat(b, 2, 1) + torch.cat([boxes0, boxes1], 1)
+        boxes = boxes * self.strides
+        scores, labels = scores.transpose(1, 2).max(dim=-1, keepdim=True)
+        return boxes.transpose(1, 2), scores, labels
+
+class PostPose(nn.Module):
+    iou_thres = 0.65
+    conf_thres = 0.25
+    topk = 100
+    export = True
+    shape = None
+    dynamic = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x):
+        pass
+    
 def make_anchors(feats: Tensor, strides: Tensor, grid_cell_offset: float = 0.5) -> Tuple[Tensor, Tensor]:
     anchor_points, stride_tensor = [], []
     assert feats is not None
@@ -114,7 +189,6 @@ def make_anchors(feats: Tensor, strides: Tensor, grid_cell_offset: float = 0.5) 
         anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
         stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
     return torch.cat(anchor_points), torch.cat(stride_tensor)
-
 
 class TRT_NMS(torch.autograd.Function):
 
@@ -166,24 +240,5 @@ class TRT_NMS(torch.autograd.Function):
         nums_dets, boxes, scores, classes = out
         return nums_dets, boxes, scores, classes
 
-def optim(module: nn.Module):
-    s = str(type(module))[6:-2].split('.')[-1]
-    if s == 'Detect':
-        setattr(module, '__class__', PostDetect)
-    elif s == 'C2f':
-        setattr(module, '__class__', C2f)
-
-class C2f(nn.Module):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-    def forward(self, x):
-        x = self.cv1(x)
-        x = [x, x[:, self.c:, ...]]
-        x.extend(m(x[-1]) for m in self.m)
-        x.pop(1)
-        return self.cv2(torch.cat(x, 1))
-    
 if __name__ == '__main__':
     main()
