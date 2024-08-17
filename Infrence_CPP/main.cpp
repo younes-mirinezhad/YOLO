@@ -2,7 +2,6 @@
 #include "detector_tensorrt.h"
 #include "spdlog/spdlog.h"
 #include "qthread.h"
-// #include "detector_opencv_dnn.h"
 
 int main(int argc, char *argv[])
 {
@@ -11,9 +10,6 @@ int main(int argc, char *argv[])
     // Need to use e2e engine file
     std::string detectorModelPath = "/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_end2end.engine";
     auto detector = new Detector_TensorRT;
-
-    // std::string detectorModelPath = "/media/chiko/HDD_1/W/Pars_AI/Projects/Archive/YOLOv8/Models/Detection/yolov8n.onnx";
-    // auto detector = new Detector_OpenCV_DNN; // It has problem in detection boxes
 
     auto inputSize = cv::Size(640, 640);
     detector->setInputSize(inputSize);
