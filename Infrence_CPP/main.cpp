@@ -7,7 +7,8 @@
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
-
+    
+    // Need to use e2e engine file
     std::string detectorModelPath = "/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_end2end.engine";
     auto detector = new Detector_TensorRT;
 
