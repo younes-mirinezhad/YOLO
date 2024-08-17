@@ -52,24 +52,21 @@ int main(int argc, char *argv[])
         auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
         res.detectionTime_ms = dt;
 
+        spdlog::info("----------> detection time: {} ms", res.detectionTime_ms);
+
         img = cv::imread(imgPath);
         auto color_box = cv::Scalar(0, 0, 255);
         for (int i = 0; i < res.detections.size(); ++i) {
-            spdlog::info("----------> Class: {} - Conf: {} - Box: [{}x{}] , [{}x{}]",
-                          res.detections[i].className,
-                          res.detections[i].confidence,
-                          res.detections[i].box.x,
-                          res.detections[i].box.y,
-                          res.detections[i].box.width,
-                          res.detections[i].box.height,
-                          dt);
+            spdlog::info("--------------------> Class: {} - Conf: {} - Box: [{}x{}] , [{}x{}]",
+                          res.detections[i].className, res.detections[i].confidence,
+                          res.detections[i].box.x, res.detections[i].box.y,
+                          res.detections[i].box.width, res.detections[i].box.height );
 
             cv::rectangle(img, res.detections[i].box, color_box, 2, 8);
             cv::putText(img, res.detections[i].className,
                         cv::Point(res.detections[i].box.x, res.detections[i].box.y),
                         cv::FONT_HERSHEY_PLAIN, 1.0, CV_RGB(0,255,0), 2.0);
         }
-        spdlog::info("---------------> detection time: {} ms", res.detectionTime_ms);
         spdlog::info("------------------------------------------------------------");
         cv::imshow("Detection Box", img);
     }

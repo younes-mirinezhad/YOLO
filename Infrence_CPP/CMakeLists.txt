@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-set(PROJECT_NAME YOLOv8)
+set(PROJECT_NAME YOLOv8_Infrence_CPP)
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
