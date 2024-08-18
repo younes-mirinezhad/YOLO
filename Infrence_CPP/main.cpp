@@ -6,10 +6,26 @@
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
-    
-    // Need to use e2e engine file
-    std::string detectorModelPath = "/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_end2end.engine";
-    auto inputSize = cv::Size(640, 640);
+
+    auto detector = new Detector_TensorRT;
+
+    bool end2end{true};
+    detector->setEnd2End(end2end);
+    std::string detectorModelPath{};
+    if (end2end) {
+        detectorModelPath = "/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640_end2end.engine";
+    } else {
+        detectorModelPath = "/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640.engine";
+    }
+    auto detectorStatus = detector->LoadModel(detectorModelPath);
+    if(!detectorStatus)
+        return{};
+
+    auto imgPath = "/media/chiko/HDD_2/Dataset/Coco/CocoImage/img.jpeg";
+    bool useGPUMat{false};
+    cv::Mat img;
+    cv::cuda::GpuMat gImg;
+
     std::vector<std::string> classNamesList = {
         "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
         "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
@@ -22,19 +38,14 @@ int main(int argc, char *argv[])
         "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book",
         "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
     };
-    auto imgPath = "/media/chiko/HDD_2/Dataset/Coco/CocoImage/img.jpeg";
-    bool useGPUMat{true};
-
-    auto detector = new Detector_TensorRT;
-    detector->setInputSize(inputSize);
     detector->setClassNames(classNamesList);
-    auto detectorStatus = detector->LoadModel(detectorModelPath);
-    if(!detectorStatus)
-        return{};
 
-    cv::Mat img;
-    cv::cuda::GpuMat gImg;
-    for (int idx = 0; idx < 100; ++idx) {
+    auto inputSize = cv::Size(640, 640);
+    detector->setInputSize(inputSize);
+
+    int totalTime{0};
+    int testCount{100};
+    for (int idx = 0; idx < testCount; ++idx) {
         QThread::msleep(50);
 
         img = cv::imread(imgPath);
@@ -57,6 +68,7 @@ int main(int argc, char *argv[])
         auto t2 = std::chrono::high_resolution_clock::now();
         auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
         res.detectionTime_ms = dt;
+        totalTime += dt;
 
         spdlog::info("----------> detection time: {} ms", res.detectionTime_ms);
 
@@ -76,6 +88,7 @@ int main(int argc, char *argv[])
         spdlog::info("------------------------------------------------------------");
         cv::imshow("Detection Box", img);
     }
+    spdlog::info("-*-*-*-*-*-*-*-*-*-*> Average time: {} ms", totalTime/testCount);
     cv::waitKey(0);
 
     return a.exec();

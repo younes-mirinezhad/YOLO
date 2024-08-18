@@ -73,7 +73,7 @@ void TrtLogger::log(Severity severity, const char *msg) noexcept
     }
 }
 
-Detector_TensorRT::Detector_TensorRT(QObject *parent) : Detector{parent} {}
+Detector_TensorRT::Detector_TensorRT(QObject *parent) : QObject{parent} {}
 Detector_TensorRT::~Detector_TensorRT()
 {
     context->destroy();
@@ -84,6 +84,25 @@ Detector_TensorRT::~Detector_TensorRT()
     for (auto& ptr : host_ptrs) {
         CHECK(cudaFreeHost(ptr));
     }
+}
+
+void Detector_TensorRT::setClassNames(std::vector<std::string> newClassNamesList)
+{
+    spdlog::info(Q_FUNC_INFO);
+
+    _classNamesList = newClassNamesList;
+}
+void Detector_TensorRT::setInputSize(cv::Size newInputSize)
+{
+    spdlog::info(Q_FUNC_INFO);
+
+    _inputSize = newInputSize;
+}
+void Detector_TensorRT::setEnd2End(bool newStatus)
+{
+    spdlog::info(Q_FUNC_INFO);
+
+    _end2end = newStatus;
 }
 
 bool Detector_TensorRT::LoadModel(std::string &modelPath)
@@ -126,14 +145,13 @@ bool Detector_TensorRT::LoadModel(std::string &modelPath)
         binding.name = name.data();
         binding.dsize = type_to_size(dtype);
 
-        bool IsInput = engine->bindingIsInput(i);
+        bool IsInput = engine->getTensorIOMode(name.data()) == nvinfer1::TensorIOMode::kINPUT;
         if (IsInput) {
             num_inputs += 1;
             dims = engine->getProfileShape(name.data(), 0, nvinfer1::OptProfileSelector::kMAX);
             binding.size = get_size_by_dims(dims);
             binding.dims = dims;
             input_bindings.push_back(binding);
-            // set max opt shape
             context->setInputShape(name.data(), dims);
         } else {
             num_outputs += 1;
@@ -173,12 +191,19 @@ Frames_Detection Detector_TensorRT::detect(cv::Mat &srcImg)
 {
     copy_from_Mat(srcImg, _inputSize);
     context->enqueueV2(device_ptrs.data(), stream, nullptr);
+    // context->enqueueV3(stream);
     for (int i = 0; i < num_outputs; i++) {
         size_t osize = output_bindings[i].size * output_bindings[i].dsize;
         CHECK(cudaMemcpyAsync(host_ptrs[i], device_ptrs[i + num_inputs], osize, cudaMemcpyDeviceToHost, stream));
     }
     CHECK(cudaStreamSynchronize(stream));
-    auto resFrame = postprocess();
+
+    Frames_Detection resFrame;
+    if (_end2end) {
+        resFrame = postprocess_end2end();
+    } else {
+        resFrame = postprocess_normal();
+    }
 
     return resFrame;
 }
@@ -226,12 +251,19 @@ Frames_Detection Detector_TensorRT::detect(cv::cuda::GpuMat &srcImg)
 {
     copy_from_Mat(srcImg, _inputSize);
     context->enqueueV2(device_ptrs.data(), stream, nullptr);
+    // context->enqueueV3(stream);
     for (int i = 0; i < num_outputs; i++) {
         size_t osize = output_bindings[i].size * output_bindings[i].dsize;
         CHECK(cudaMemcpyAsync(host_ptrs[i], device_ptrs[i + num_inputs], osize, cudaMemcpyDeviceToHost, stream));
     }
     CHECK(cudaStreamSynchronize(stream));
-    auto resFrame = postprocess();
+
+    Frames_Detection resFrame;
+    if (_end2end) {
+        resFrame = postprocess_end2end();
+    } else {
+        resFrame = postprocess_normal();
+    }
 
     return resFrame;
 }
@@ -305,7 +337,81 @@ inline static float clamp(float val, float min, float max)
 {
     return val > min ? (val < max ? val : max) : min;
 }
-Frames_Detection Detector_TensorRT::postprocess()
+Frames_Detection Detector_TensorRT::postprocess_normal()
+{
+    Frames_Detection resFrame;
+
+    float score_thres = 0.25f;
+    float iou_thres = 0.65f;
+    int topk = 100;
+    int num_labels = _classNamesList.size();
+    int num_channels = output_bindings[0].dims.d[1];
+    int num_anchors = output_bindings[0].dims.d[2];
+
+    auto& dw = pparam.dw;
+    auto& dh = pparam.dh;
+    auto& width = pparam.width;
+    auto& height = pparam.height;
+    auto& ratio = pparam.ratio;
+
+    std::vector<cv::Rect> bboxes;
+    std::vector<float> scores;
+    std::vector<int> labels;
+    std::vector<int> indices;
+
+    cv::Mat output = cv::Mat(num_channels, num_anchors, CV_32F, static_cast<float*>(host_ptrs[0]));
+    output = output.t();
+    for (int i = 0; i < num_anchors; i++) {
+        auto  row_ptr = output.row(i).ptr<float>();
+        auto  bboxes_ptr = row_ptr;
+        auto  scores_ptr = row_ptr + 4;
+        auto  max_s_ptr = std::max_element(scores_ptr, scores_ptr + num_labels);
+        float score = *max_s_ptr;
+        if (score > score_thres) {
+            float x = *bboxes_ptr++ - dw;
+            float y = *bboxes_ptr++ - dh;
+            float w = *bboxes_ptr++;
+            float h = *bboxes_ptr;
+
+            float x0 = clamp((x - 0.5f * w) * ratio, 0.f, width);
+            float y0 = clamp((y - 0.5f * h) * ratio, 0.f, height);
+            float x1 = clamp((x + 0.5f * w) * ratio, 0.f, width);
+            float y1 = clamp((y + 0.5f * h) * ratio, 0.f, height);
+
+            int label = max_s_ptr - scores_ptr;
+            cv::Rect_<float> bbox;
+            bbox.x = x0;
+            bbox.y = y0;
+            bbox.width = x1 - x0;
+            bbox.height = y1 - y0;
+
+            bboxes.push_back(bbox);
+            labels.push_back(label);
+            scores.push_back(score);
+        }
+    }
+
+    // cv::dnn::NMSBoxesBatched(bboxes, scores, labels, score_thres, iou_thres, indices);
+    cv::dnn::NMSBoxes(bboxes, scores, score_thres, iou_thres, indices);
+
+    int cnt = 0;
+    for (auto& i : indices) {
+        if (cnt >= topk) {
+            break;
+        }
+        DetectedObject result;
+        result.box  = bboxes[i];
+        result.confidence  = scores[i];
+        result.classID = labels[i];
+        if(_classNamesList.size() > result.classID)
+            result.className = _classNamesList[result.classID];
+        resFrame.detections.push_back(result);
+        cnt += 1;
+    }
+
+    return resFrame;
+}
+Frames_Detection Detector_TensorRT::postprocess_end2end()
 {
     Frames_Detection resFrame;
 

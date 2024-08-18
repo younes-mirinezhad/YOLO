@@ -7,8 +7,8 @@ int main(int argc, char *argv[])
 
     qDebug("---------- Start");
 
-    auto onnxPath{"path/to/sample_end2end.onnx"};
-    auto enginePath{"path/to/sample_end2end.engine"};
+    auto onnxPath{"/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640_end2end.onnx"};
+    auto enginePath{"/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640_end2end.engine"};
     EngineBuilder engineBuilder(onnxPath, enginePath);
     engineBuilder.buildEngine();
 
