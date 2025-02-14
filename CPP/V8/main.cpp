@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+//#include "EngineBuilder/enginebuilder.h"
 #include "detector_tensorrt.h"
 #include "spdlog/spdlog.h"
 #include "qthread.h"
@@ -6,6 +7,15 @@
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
+    
+    //qDebug("---------- Start");
+
+    //auto onnxPath{"/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640_end2end.onnx"};
+    //auto enginePath{"/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/Models/Detection/yolov8n_640_end2end.engine"};
+    //EngineBuilder engineBuilder(onnxPath, enginePath);
+    //engineBuilder.buildEngine();
+
+    //qDebug("---------- End");
 
     auto detector = new Detector_TensorRT;
 
@@ -21,8 +31,8 @@ int main(int argc, char *argv[])
     if(!detectorStatus)
         return{};
 
-    auto imgPath = "/media/chiko/HDD_2/Dataset/Coco/CocoImage/img.jpeg";
-    bool useGPUMat{false};
+    auto imgPath = "/media/chiko/HDD_1/Work/Dataset/Coco/CocoImage/img.jpeg";
+    bool useGPUMat{true};
     cv::Mat img;
     cv::cuda::GpuMat gImg;
 

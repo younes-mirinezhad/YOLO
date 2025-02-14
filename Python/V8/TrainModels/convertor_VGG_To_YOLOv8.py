@@ -1,9 +1,9 @@
 import os, json, cv2, shutil
 
-jsonPath = "/media/chiko/HDD_1/Hamed/Femur_2.json"
-imagePath = "/media/chiko/HDD_1/Hamed/Dataset/"
-outputPath = "/media/chiko/HDD_1/Hamed/TrainDataset"
-img_type = '.BMP'
+jsonPath = "/path/to/data.json"
+imagePath = "/path/to/Images/"
+outputPath = "/path/to/outDataset"
+img_type = '.jpg'
 annot_type = '.txt'
 
 if os.path.exists(outputPath):

@@ -1,3 +1,6 @@
+# repo: https://github.com/Linaom1214/TensorRT-For-YOLO-Series
+
+import os
 from ultralytics import YOLO
 import torch
 import torch.nn as nn
@@ -13,82 +16,106 @@ from pathlib import Path
 import tensorrt as trt
 import pickle
 import numpy as np
-import os
 
-def main():
-    weight_pt = "path/to/model.pt" # PyTorch yolov8 weights
-    weight_ONNX = weight_pt.replace(".pt", "_end2end.onnx") # ONNX yolov8 weights
-    device = "cuda:0" # cpu , cuda:0 --> Export device
-    input_shape = [1, 3, 960, 960] # Model input shape only for api builder
-    topk = 100 # Max number of detection bboxes
-    conf_thres = 0.25 # CONF threshoud for NMS plugin
-    iou_thres = 0.65 # IOU threshoud for NMS plugin
+class Builder():
+    def __init__(self):
+        self._modelPath_PT = ""
+        self._modelPath_ONNX = ""
+        self._modelPath_Engine = ""
+        self._device = "cuda:0" if torch.cuda.is_available() else "cpu" # Check for CUDA availability
+        self._device = "cuda:0"
+        self._input_shape = [1, 3, 640, 640] # Model input shape only for api builder
+        self._topk = 100 # Max number of detection bboxes
+        self._conf_thres = 0.25 # CONF threshoud for NMS plugin
+        self._iou_thres = 0.65 # IOU threshoud for NMS plugin
 
-    opset = 11 # ONNX opset version
-    sim = True # simplify onnx model
-    ONNX_Export(weight_pt, weight_ONNX, device, input_shape, opset, topk, sim, conf_thres, iou_thres)
+        self._opset = 19 # ONNX opset version
+        self._sim = True # simplify onnx model
 
-    seg = False # Build seg model by onnx
-    fp16 = True # Build model with fp16 mode
-    Engine_Export(weight_ONNX, device, seg, fp16, input_shape, iou_thres, conf_thres, topk)
+        self._seg = False # Build seg model by onnx
+        self._fp16 = True # Build model with fp16 mode
 
-def ONNX_Export(weight_pt, weight_ONNX, device, input_shape, opset, topk, sim, conf_thres, iou_thres):
-    PostDetect.conf_thres = conf_thres
-    PostDetect.iou_thres = iou_thres
-    PostDetect.topk = topk
+    def setModelPath(self, modelPath_PT, odelPath_ONNX, modelPath_Engine):
+        self._modelPath_PT = modelPath_PT
+        self._modelPath_ONNX = odelPath_ONNX
+        self._modelPath_Engine = modelPath_Engine
+    
+    def setConfigs(self, input_shape, topk, conf_thres, iou_thres):
+        self._input_shape = input_shape
+        self._topk = topk
+        self._conf_thres = conf_thres
+        self._iou_thres = iou_thres
 
-    batch = input_shape[0]
+    def build(self):
+        if not os.path.exists(self._modelPath_PT):
+            print(f"Torch model not find in this path: {self._modelPath_PT}")
+            return
 
-    YOLOv8 = YOLO(weight_pt)
+        if not os.path.exists(self._modelPath_ONNX):
+            self.ONNX_Export()
 
-    model = YOLOv8.model.fuse().eval()
-    for m in model.modules():
-        optim(m)
-        m.to(device)
-    model.to(device)
+        if not os.path.exists(self._modelPath_Engine):
+            self.Engine_Export()
 
-    fake_input = torch.randn(input_shape).to(device)
+    def ONNX_Export(self):
+        PostDetect.conf_thres = self._conf_thres
+        PostDetect.iou_thres = self._iou_thres
+        PostDetect.topk = self._topk
 
-    for _ in range(2):
-        model(fake_input)
+        batch = self._input_shape[0]
 
-    with BytesIO() as f:
-        torch.onnx.export(
-            model, fake_input, f,
-            opset_version=opset,
-            input_names=['images'],
-            output_names=['num_dets', 'bboxes', 'scores', 'labels'])
-        f.seek(0)
-        onnx_model = onnx.load(f)
-    onnx.checker.check_model(onnx_model)
+        YOLOv8 = YOLO(self._modelPath_PT)
 
-    shapes = [batch, 1, batch, topk, 4, batch, topk, batch, topk]
+        model = YOLOv8.model.fuse().eval()
+        for m in model.modules():
+            self.optim(m)
+            m.to(self._device)
+        model.to(self._device)
 
-    for i in onnx_model.graph.output:
-        for j in i.type.tensor_type.shape.dim:
-            j.dim_param = str(shapes.pop(0))
+        fake_input = torch.randn(self._input_shape).to(self._device)
 
-    if sim:
-        try:
-            onnx_model, check = onnxsim.simplify(onnx_model)
-            assert check, 'assert check failed'
-        except Exception as e:
-            print(f'Simplifier failure: {e}')
+        for _ in range(2):
+            model(fake_input)
 
-    onnx.save(onnx_model, weight_ONNX)
-    print(f'ONNX export success, saved as {weight_ONNX}')
+        with BytesIO() as f:
+            torch.onnx.export(
+                model, fake_input, f,
+                opset_version=self._opset,
+                input_names=['images'],
+                output_names=['num_dets', 'bboxes', 'scores', 'labels'])
+            f.seek(0)
+            onnx_model = onnx.load(f)
+        onnx.checker.check_model(onnx_model)
 
-def Engine_Export(weight_ONNX, device, seg, fp16, input_shape, iou_thres, conf_thres, topk):
-    builder = EngineBuilder(weight_ONNX, device)
-    builder.seg = seg
-    builder.build(fp16=fp16, input_shape=input_shape, iou_thres=iou_thres, conf_thres=conf_thres, topk=topk)
+        shapes = [batch, 1, batch, self._topk, 4, batch, self._topk, batch, self._topk]
 
-def optim(module: nn.Module):
-    s = str(type(module))[6:-2].split('.')[-1]
-    if s == 'Detect':
-        setattr(module, '__class__', PostDetect)
-    elif s == 'C2f':
-        setattr(module, '__class__', C2f)
+        for i in onnx_model.graph.output:
+            for j in i.type.tensor_type.shape.dim:
+                j.dim_param = str(shapes.pop(0))
+
+        if self._sim:
+            try:
+                onnx_model, check = onnxsim.simplify(onnx_model)
+                assert check, 'assert check failed'
+            except Exception as e:
+                print(f"-----> Simplifier failure: {e}")
+
+        onnx.save(onnx_model, self._modelPath_ONNX)
+        print(f"-----> ONNX exports successfully: {self._modelPath_ONNX}")
+    
+    def Engine_Export(self):
+        builder = EngineBuilder(self._modelPath_ONNX, self._device)
+        builder.seg = self._seg
+        enginePath = builder.build(self._fp16, self._input_shape, self._iou_thres, self._conf_thres, self._topk)
+        print(f"-----> Engine exports successfully: {enginePath}")
+        return enginePath
+    
+    def optim(self, module: nn.Module):
+        s = str(type(module))[6:-2].split('.')[-1]
+        if s == 'Detect':
+            setattr(module, '__class__', PostDetect)
+        elif s == 'C2f':
+            setattr(module, '__class__', C2f)
 
 class PostDetect(nn.Module):
     export = True
@@ -108,7 +135,7 @@ class PostDetect(nn.Module):
             res.append(torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1))
         if self.dynamic or self.shape != shape:
             self.anchors, self.strides = (x.transpose(
-                0, 1) for x in make_anchors(x, self.stride, 0.5))
+                0, 1) for x in self.make_anchors(x, self.stride, 0.5))
             self.shape = shape
         x = [i.view(b, self.no, -1) for i in res]
         y = torch.cat(x, 2)
@@ -120,9 +147,21 @@ class PostDetect(nn.Module):
         boxes = boxes * self.strides
 
         return TRT_NMS.apply(boxes.transpose(1, 2), scores.transpose(1, 2), self.iou_thres, self.conf_thres, self.topk)
+    
+    def make_anchors(self, feats: Tensor, strides: Tensor, grid_cell_offset: float = 0.5) -> Tuple[Tensor, Tensor]:
+        anchor_points, stride_tensor = [], []
+        assert feats is not None
+        dtype, device = feats[0].dtype, feats[0].device
+        for i, stride in enumerate(strides):
+            _, _, h, w = feats[i].shape
+            sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
+            sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
+            sy, sx = torch.meshgrid(sy, sx)
+            anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
+            stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
+        return torch.cat(anchor_points), torch.cat(stride_tensor)
 
 class C2f(nn.Module):
-
     def __init__(self, *args, **kwargs):
         super().__init__()
 
@@ -134,7 +173,6 @@ class C2f(nn.Module):
         return self.cv2(torch.cat(x, 1))
 
 class TRT_NMS(torch.autograd.Function):
-
     @staticmethod
     def forward(
             ctx: Graph,
@@ -183,19 +221,6 @@ class TRT_NMS(torch.autograd.Function):
         nums_dets, boxes, scores, classes = out
         return nums_dets, boxes, scores, classes
 
-def make_anchors(feats: Tensor, strides: Tensor, grid_cell_offset: float = 0.5) -> Tuple[Tensor, Tensor]:
-    anchor_points, stride_tensor = [], []
-    assert feats is not None
-    dtype, device = feats[0].dtype, feats[0].device
-    for i, stride in enumerate(strides):
-        _, _, h, w = feats[i].shape
-        sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
-        sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
-        sy, sx = torch.meshgrid(sy, sx)
-        anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
-        stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
-    return torch.cat(anchor_points), torch.cat(stride_tensor)
-
 class EngineBuilder:
     seg = False
 
@@ -242,7 +267,7 @@ class EngineBuilder:
             config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
         with self.builder.build_engine(self.network, config) as engine:
             self.weight.write_bytes(engine.serialize())
-        self.logger.log(trt.Logger.WARNING, f'Build tensorrt engine finish.\n' f'Save in {str(self.weight.absolute())}')
+        self.logger.log(trt.Logger.WARNING, f'Build tensorrt engine finish.')
 
     def build(self,
               fp16: bool = True,
@@ -252,6 +277,7 @@ class EngineBuilder:
               topk: int = 100,
               with_profiling=True) -> None:
         self.__build_engine(fp16, input_shape, iou_thres, conf_thres, topk, with_profiling)
+        return str(self.weight.absolute())
 
     def build_from_onnx(self, iou_thres: float = 0.65, conf_thres: float = 0.25, topk: int = 100):
         parser = trt.OnnxParser(self.network, self.logger)
@@ -569,6 +595,3 @@ class EngineBuilder:
             assert ew, 'Add elementwise layer failed'
             return ew
         return conv2
-
-if __name__ == '__main__':
-    main()

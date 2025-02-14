@@ -1,11 +1,12 @@
 from ultralytics import YOLO
 
 # Load detection model
-# model = YOLO('yolov8n.pt')
+model = YOLO('yolov8n.pt')
 
 # Load segmentation model
-model = YOLO('yolov8n-seg.pt')
-yamlPath = '/media/chiko/HDD_1/Work/Pars_AI/Femur/Data/FemurDataset/3_femur-seg_Part3_4Cto2C.yaml'
+# model = YOLO('yolov8n-seg.pt')
+
+yamlPath = '/media/chiko/HDD_1/Work/Pars_AI/Projects/InProgress/YOLOv8/TrainModels/sampleData/coco8-seg.yaml'
 
 # Train the model with CPU
 # results = model.train(data=yamlPath, epochs=500, imgsz=640, device='cpu')
