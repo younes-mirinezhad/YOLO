@@ -101,9 +101,9 @@ void Detector_TensorRT::setClassNames(QStringList newClassNames)
     _classNames = newClassNames;
 }
 
-bool Detector_TensorRT::loadModel(QString &modelPath)
+bool Detector_TensorRT::loadModel(std::string &modelPath)
 {
-    std::ifstream file(modelPath.toStdString(), std::ios::binary);
+    std::ifstream file(modelPath, std::ios::binary);
     assert(file.good());
     file.seekg(0, std::ios::end);
     auto size = file.tellg();

@@ -53,7 +53,10 @@ message("##### TensorRT")
 
 target_link_libraries(${PROJECT_NAME} "/usr/lib/x86_64-linux-gnu/libnvinfer.so")
 target_link_libraries(${PROJECT_NAME} "/usr/lib/x86_64-linux-gnu/libnvinfer_plugin.so")
+target_link_libraries(${PROJECT_NAME} "/usr/lib/x86_64-linux-gnu/libnvonnxparser.so")
+
 # target_link_libraries(${PROJECT_NAME} "/usr/local/cuda-12.1/targets/x86_64-linux/lib/libcudart.so")
+# target_include_directories(${PROJECT_NAME} PUBLIC "usr/include/x86_64-linux-gnuv")
 
 ###################################################################
 

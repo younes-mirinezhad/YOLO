@@ -44,7 +44,7 @@ public:
 
     void setInputSize(cv::Size newInputSize);
     void setClassNames(QStringList newClassNames);
-    bool loadModel(QString& modelPath);
+    bool loadModel(std::string& modelPath);
     QList<QList<DetectedObject>> detect(std::vector<cv::Mat> &src_imgs);
 
 private:
