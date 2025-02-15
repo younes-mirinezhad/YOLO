@@ -12,12 +12,13 @@ class_names = [ 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'tr
                'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
                'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
                'hair drier', 'toothbrush' ]
-modelPath_PT = "Models/Detection/yolov8n.pt"
-modelPath_ONNX = "Models/Detection/yolov8n_end2end.onnx"
-modelPath_Engine = "Models/Detection/yolov8n_end2end.engine"
-filePath = "cars.mp4"
+modelPath_PT = "../Files/Models/Detection/yolov8n.pt"
+modelPath_ONNX = "../Files/Models/Detection/yolov8n_end2end.onnx"
+modelPath_Engine = "../Files/Models/Detection/yolov8n_end2end.engine"
+modelPath_Engine = "../Files/Models/Detection/yolov8n_b5_640_end2end.engine"
 
-isVideo = True
+filePath = "../Files/Images/000000000025.jpg"
+isVideo = False
 
 def exportNormalOnnx(modelPath):
     model = YOLO(modelPath)

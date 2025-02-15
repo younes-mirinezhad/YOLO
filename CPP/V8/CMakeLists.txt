@@ -1,7 +1,6 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.16)
 
-set(PROJECT_NAME YOLOv8_Infrence_CPP)
-project(${PROJECT_NAME} LANGUAGES CXX)
+project(YOLOv8 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -13,22 +12,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core)
 
-add_executable(${PROJECT_NAME}
+add_executable(YOLOv8
   main.cpp
-  detector_tensorrt.h detector_tensorrt.cpp
+  Detector/detector_tensorrt.h Detector/detector_tensorrt.cpp
+  EngineBuilder/enginebuilder.h EngineBuilder/enginebuilder.cpp
 )
-target_link_libraries(${PROJECT_NAME} Qt${QT_VERSION_MAJOR}::Core)
-
-###################################################################
-
-if(POLICY CMP0146)
-    cmake_policy(SET CMP0146 OLD)
-endif()
-
-###################################################################
-message("##### Finding spdlog")
-
-include_directories(${CMAKE_SOURCE_DIR}/thirdParty/spdlog/include)
+target_link_libraries(YOLOv8 Qt${QT_VERSION_MAJOR}::Core)
 
 ###################################################################
 message("##### Find CUDA")
@@ -69,7 +58,7 @@ target_link_libraries(${PROJECT_NAME} "/usr/lib/x86_64-linux-gnu/libnvinfer_plug
 ###################################################################
 
 include(GNUInstallDirs)
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS YOLOv8
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
