@@ -80,9 +80,9 @@ class TRT_Detector():
         except Exception as e:
             return False
     
-    def inference(self, origin_img):
-        # img, ratio = preproc(origin_img, self.imgsz, self.mean, self.std)
-        img, ratio, dwdh = self.letterbox(origin_img, self.imgsz)
+    def inference(self, org_img):
+        # img, ratio = preproc(org_img, self.imgsz, self.mean, self.std)
+        img, ratio, dwdh = self.letterbox(org_img, self.imgsz)
         data = self.infer(img)
 
         num, final_boxes, final_scores, final_cls_inds  = data
@@ -96,8 +96,8 @@ class TRT_Detector():
 
         if dets is not None:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
-            origin_img = self.vis(origin_img, final_boxes, final_scores, final_cls_inds, class_names=self.class_names)
-        return origin_img
+            org_img = self.vis(org_img, final_boxes, final_scores, final_cls_inds, class_names=self.class_names)
+        return org_img
     
     def letterbox(self, im, new_shape = (640, 640), color = (114, 114, 114), swap=(2, 0, 1)):
         shape = im.shape[:2]  # current shape [height, width]
